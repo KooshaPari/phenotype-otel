@@ -1,0 +1,30 @@
+[package]
+name = "pheno-otel"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Phenotype OpenTelemetry bridge: OTLP HTTP exporter + tracing-opentelemetry + tracing-subscriber"
+repository = "https://github.com/KooshaPari/phenotype-infrakit"
+readme = "README.md"
+keywords = ["opentelemetry", "tracing", "otlp", "telemetry", "phenotype"]
+categories = ["api-bindings", "development-tools::profiling", "asynchronous"]
+
+[dependencies]
+opentelemetry = { version = "0.24", features = ["trace"] }
+opentelemetry-otlp = { version = "0.17", default-features = false, features = ["trace", "http-proto", "reqwest-client"] }
+opentelemetry_sdk = { version = "0.24", features = ["trace", "rt-tokio"] }
+opentelemetry-semantic-conventions = "0.16"
+tracing = "0.1"
+tracing-opentelemetry = "0.25"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "registry"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+
+[[example]]
+name = "basic"
+path = "examples/basic.rs"
+
+[lib]
+name = "pheno_otel"
+path = "src/lib.rs"
