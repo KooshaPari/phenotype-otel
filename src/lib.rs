@@ -71,8 +71,7 @@ pub fn init(service_name: &str, otlp_endpoint: &str) -> Result<(), OtelBridgeErr
     let tracer = provider.tracer(service_name.to_string());
     let otel_layer = tracing_opentelemetry::layer().with_tracer(tracer);
 
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info"));
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
     tracing_subscriber::registry()
         .with(env_filter)

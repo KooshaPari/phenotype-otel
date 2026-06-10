@@ -14,8 +14,7 @@
 use tracing::{info, info_span};
 
 fn main() {
-    pheno_otel::init("example", pheno_otel::DEFAULT_OTLP_ENDPOINT)
-        .expect("OTEL init failed");
+    pheno_otel::init("example", pheno_otel::DEFAULT_OTLP_ENDPOINT).expect("OTEL init failed");
 
     let root = info_span!("example.root", run_id = 42);
     let _enter = root.enter();
