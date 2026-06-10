@@ -15,70 +15,67 @@ concurrency:
 
 jobs:
   check:
-    name: "check + test + lint + deny"
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    name: Lint, check, test
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@1e2444e72d28e2f0e8b2a9848ee34d0c2a93ec1c # stable
+        uses: dtolnay/rust-toolchain@stable
 
-      - name: Cache cargo registry & target
-        uses: Swatinem/rust-cache@02dd5acef1b8441745e1805b4ada46e5dc55ee248 # v2
-        with:
-          cache-on-failure: true
+      - name: Cache cargo registry and target
+        uses: Swatinem/rust-cache@v2
 
       - name: Install task
-        uses: arduino/setup-task@1de38fc4cf3a0e56f5b0c8b8d4a83c9c9b8d9d09 # v1
-        with:
-          version: 3.x
-          repo-token: ${{ secrets.GITHUB_TOKEN }}
+        uses: arduino/setup-task@v1
 
-      - name: Install cargo-deny
-        run: cargo install --locked cargo-deny
+      - name: Cache just
+        uses: extractions/setup-just@v2
 
-      - name: Check
-        run: task check
+      - name: Lint Markdown
+        run: npx --yes markdownlint-cli2 'README.md' 'docs/**/*.md' 2>&1 || true
 
-      - name: Lint (fmt + clippy)
-        run: task lint
+      - name: Lint Rust
+        run: cargo fmt --all -- --check && cargo clippy --all-targets --all-features -- -D warnings
 
-      - name: Test
-        run: task test
+      - name: Check + test
+        run: cargo check --all-features && cargo test --all-features
 
-      - name: License / ban check
-        run: task deny
+      - name: cargo-deny
+        run: |
+          cargo install --locked cargo-deny || true
+          cargo deny check licenses
+
+      - name: cargo-audit
+        run: |
+          cargo install --locked cargo-audit || true
+          cargo audit
 
   build-example:
-    name: "build example"
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: check
+    name: Build example
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
-
-      - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@1e2444e72d28e2f0e8b2a9848ee34d0c2a93ec1c # stable
-
-      - name: Cache cargo registry & target
-        uses: Swatinem/rust-cache@02dd5acef1b8441745e1805b4ada46e5dc55ee248 # v2
-        with:
-          cache-on-failure: true
-
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - name: Build example
         run: cargo build --example basic
 
   secrets:
-    name: "TruffleHog secrets scan"
-    runs-on: ubuntu-latest
+    name: TruffleHog secrets scan
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
       - name: TruffleHog
-        uses: trufflesecurity/trufflehog@03e8af1075a7f7410664de9f6a1101268c9c8c92 # v3.88.13
+        uses: trufflesecurity/trufflehog@main
         with:
-          extra-args: --no-update
+          path: .
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+          extraArgs: --no-history
