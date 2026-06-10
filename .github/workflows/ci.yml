@@ -22,15 +22,15 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@1e2444e72d28e2f0e8b2a9848ee34d0c2a93ec1c # stable
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo registry & target
-        uses: Swatinem/rust-cache@02dd5acef1b8441745e1805b4ada46e5dc55ee248 # v2
+        uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
 
       - name: Install task
-        uses: arduino/setup-task@1de38fc4cf3a0e56f5b0c8b8d4a83c9c9b8d9d09 # v1
+        uses: arduino/setup-task@v1.0.3
         with:
           version: 3.x
           repo-token: ${{ secrets.GITHUB_TOKEN }}
@@ -59,10 +59,10 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@1e2444e72d28e2f0e8b2a9848ee34d0c2a93ec1c # stable
+        uses: dtolnay/rust-toolchain@stable
 
       - name: Cache cargo registry & target
-        uses: Swatinem/rust-cache@02dd5acef1b8441745e1805b4ada46e5dc55ee248 # v2
+        uses: Swatinem/rust-cache@v2
         with:
           cache-on-failure: true
 
@@ -79,6 +79,6 @@ jobs:
           fetch-depth: 0
 
       - name: TruffleHog
-        uses: trufflesecurity/trufflehog@6c93c2a4b1a52fe6678a385e5e9bfee0a1c4cf21 # v3.88
+        uses: trufflesecurity/trufflehog@v3.88.35
         with:
           extra-args: --no-update
