@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: "check + test + lint + deny"
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1e2444e72d28e2f0e8b2a9848ee34d0c2a93ec1c # stable
+
+      - name: Cache cargo registry & target
+        uses: Swatinem/rust-cache@02dd5acef1b8441745e1805b4ada46e5dc55ee248 # v2
+        with:
+          cache-on-failure: true
+
+      - name: Install task
+        uses: arduino/setup-task@1de38fc4cf3a0e56f5b0c8b8d4a83c9c9b8d9d09 # v1
+        with:
+          version: 3.x
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install cargo-deny
+        run: cargo install --locked cargo-deny
+
+      - name: Check
+        run: task check
+
+      - name: Lint (fmt + clippy)
+        run: task lint
+
+      - name: Test
+        run: task test
+
+      - name: License / ban check
+        run: task deny
+
+  build-example:
+    name: "build example"
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    needs: check
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@1e2444e72d28e2f0e8b2a9848ee34d0c2a93ec1c # stable
+
+      - name: Cache cargo registry & target
+        uses: Swatinem/rust-cache@02dd5acef1b8441745e1805b4ada46e5dc55ee248 # v2
+        with:
+          cache-on-failure: true
+
+      - name: Build example
+        run: cargo build --example basic
+
+  secrets:
+    name: "TruffleHog secrets scan"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4
+        with:
+          fetch-depth: 0
+
+      - name: TruffleHog
+        uses: trufflesecurity/trufflehog@6c93c2a4b1a52fe6678a385e5e9bfee0a1c4cf21 # v3.88
+        with:
+          extra-args: --no-update

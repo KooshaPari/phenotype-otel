@@ -1,0 +1,70 @@
+version: "3"
+
+vars:
+  CRATE: pheno-otel
+
+env:
+  RUSTFLAGS: "-D warnings"
+  RUST_BACKTRACE: "1"
+
+tasks:
+  check:
+    desc: "Type-check the crate"
+    cmds:
+      - cargo check --all-features
+
+  test:
+    desc: "Run unit + integration tests"
+    cmds:
+      - cargo test --workspace --all-features
+
+  build:
+    desc: "Release build"
+    cmds:
+      - cargo build --release --workspace
+
+  example:
+    desc: "Run the basic example (init + span + shutdown)"
+    cmds:
+      - cargo run --example basic
+
+  lint:
+    desc: "Run clippy + rustfmt"
+    cmds:
+      - cargo fmt --check
+      - cargo clippy --workspace --all-targets -- -D warnings
+
+  fix:
+    desc: "Auto-fix clippy + fmt"
+    cmds:
+      - cargo fmt
+      - cargo clippy --workspace --all-features --fix --allow-dirty --allow-staged
+
+  audit:
+    desc: "Security + outdated audit"
+    cmds:
+      - cargo audit
+      - cargo outdated
+
+  deny:
+    desc: "License + ban check"
+    cmds:
+      - cargo deny check
+
+  coverage:
+    desc: "Generate coverage report"
+    cmds:
+      - cargo llvm-cov --html --all-features
+
+  quality:
+    desc: "Full quality gate: check, lint, test, deny"
+    cmds:
+      - task: check
+      - task: lint
+      - task: test
+      - task: deny
+
+  default:
+    desc: "Run the full quality gate"
+    cmds:
+      - task: quality
