@@ -41,6 +41,15 @@ const DEFAULT_OTLP_ENDPOINT: &str = "http://localhost:4318";
 /// Cached global provider so [`shutdown`] can flush + drop it.
 static PROVIDER: OnceLock<TracerProvider> = OnceLock::new();
 
+fn resolve_otlp_endpoint() -> String {
+    std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT")
+        .unwrap_or_else(|_| DEFAULT_OTLP_ENDPOINT.to_string())
+}
+
+fn service_name_attribute(service_name: &str) -> opentelemetry::KeyValue {
+    opentelemetry::KeyValue::new(SERVICE_NAME, service_name.to_string())
+}
+
 /// Initialise the global OpenTelemetry + tracing pipeline.
 ///
 /// Builds an OTLP HTTP exporter pointed at
@@ -57,27 +66,24 @@ static PROVIDER: OnceLock<TracerProvider> = OnceLock::new();
 /// `tracing-subscriber` only allows one global default) or if the
 /// OTLP pipeline fails to install.
 pub fn init(service_name: &str) -> Result<(), opentelemetry::global::Error> {
-    let endpoint = std::env::var("OTEL_EXPORTER_OTLP_ENDPOINT")
-        .unwrap_or_else(|_| DEFAULT_OTLP_ENDPOINT.to_string());
+    let endpoint = resolve_otlp_endpoint();
 
     // OTLP HTTP exporter. `with_http()` switches the OTLP pipeline to
     // the HTTP/protobuf transport (the collector's default-receiver
     // on port 4318) instead of gRPC (4317).
     let exporter = opentelemetry_otlp::new_exporter()
         .http()
-        .with_endpoint(endpoint);
+        .with_endpoint(endpoint)
+        .build_span_exporter()?;
 
     // Service-name resource — every span emitted by this process
     // carries `service.name=<service_name>`.
-    let resource = Resource::new([opentelemetry::KeyValue::new(
-        SERVICE_NAME,
-        service_name.to_string(),
-    )]);
+    let resource = Resource::new([service_name_attribute(service_name)]);
 
     // Tracer provider with batched span export.
     let provider = TracerProvider::builder()
         .with_batch_exporter(exporter, opentelemetry_sdk::runtime::Tokio)
-        .with_resource(resource)
+        .with_config(sdktrace::Config::default().with_resource(resource))
         .build();
 
     // Stash the provider globally so shutdown() can flush it.
@@ -101,14 +107,14 @@ pub fn init(service_name: &str) -> Result<(), opentelemetry::global::Error> {
 
     // Honour RUST_LOG (e.g. `RUST_LOG=info,sqlx=warn`); fall back to
     // `info` so the default verbosity is sane for production.
-    let env_filter = EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| EnvFilter::new("info"));
+    let env_filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info"));
 
     tracing_subscriber::registry()
         .with(env_filter)
         .with(otel_layer)
         .with(fmt_layer)
-        .try_init()?;
+        .try_init()
+        .map_err(|err| opentelemetry::global::Error::Other(err.to_string()))?;
 
     Ok(())
 }
@@ -119,16 +125,8 @@ pub fn init(service_name: &str) -> Result<(), opentelemetry::global::Error> {
 /// Safe to call from a signal handler / shutdown hook.
 pub fn shutdown() {
     if let Some(provider) = PROVIDER.get() {
-        for result in provider.force_flush() {
-            if let Err(err) = result {
-                eprintln!("pheno-otel: force_flush error: {err}");
-            }
-        }
-        for result in provider.shutdown() {
-            if let Err(err) = result {
-                eprintln!("pheno-otel: shutdown error: {err}");
-            }
-        }
+        let _ = provider.force_flush();
+        let _ = provider.shutdown();
     }
     // Best-effort: reset the cached provider so a subsequent init()
     // call (e.g. in test harnesses) can succeed.
@@ -151,3 +149,73 @@ pub use opentelemetry;
 // type alias in the public API surface.
 #[allow(dead_code)]
 type _Trace = sdktrace::TracerProvider;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    use std::env;
+    use std::sync::{Mutex, OnceLock as StdOnceLock};
+
+    static ENV_GUARD: StdOnceLock<Mutex<()>> = StdOnceLock::new();
+
+    fn env_lock() -> std::sync::MutexGuard<'static, ()> {
+        ENV_GUARD
+            .get_or_init(|| Mutex::new(()))
+            .lock()
+            .expect("env lock poisoned")
+    }
+
+    fn with_env_var<F, T>(key: &str, value: Option<&str>, f: F) -> T
+    where
+        F: FnOnce() -> T,
+    {
+        let _guard = env_lock();
+        let original = env::var_os(key);
+
+        match value {
+            Some(value) => env::set_var(key, value),
+            None => env::remove_var(key),
+        }
+
+        let result = f();
+
+        match original {
+            Some(original) => env::set_var(key, original),
+            None => env::remove_var(key),
+        }
+
+        result
+    }
+
+    #[test]
+    fn resolve_otlp_endpoint_uses_default_when_env_is_missing() {
+        let endpoint = with_env_var("OTEL_EXPORTER_OTLP_ENDPOINT", None, resolve_otlp_endpoint);
+
+        assert_eq!(endpoint, DEFAULT_OTLP_ENDPOINT);
+    }
+
+    #[test]
+    fn resolve_otlp_endpoint_uses_env_override_when_present() {
+        let endpoint = with_env_var(
+            "OTEL_EXPORTER_OTLP_ENDPOINT",
+            Some("http://collector.example:4318"),
+            resolve_otlp_endpoint,
+        );
+
+        assert_eq!(endpoint, "http://collector.example:4318");
+    }
+
+    #[test]
+    fn service_name_attribute_sets_service_name_key_and_value() {
+        let attribute = service_name_attribute("authvault-api");
+
+        assert_eq!(attribute.key.as_str(), SERVICE_NAME);
+        assert_eq!(attribute.value.to_string(), "authvault-api");
+    }
+
+    #[test]
+    fn shutdown_is_safe_before_init() {
+        shutdown();
+    }
+}
