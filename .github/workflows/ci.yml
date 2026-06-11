@@ -64,18 +64,20 @@ jobs:
       - name: Build example
         run: cargo build --example basic
 
-  secrets:
-    name: TruffleHog secrets scan
+  # Always-on TruffleHog scan of the default branch (no BASE/HEAD
+  # comparison, so it works on the first commit too).
+  secrets-default-branch:
+    name: TruffleHog (default branch scan)
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: TruffleHog
+      - name: TruffleHog scan (default branch)
         uses: trufflesecurity/trufflehog@main
         with:
           path: .
-          base: ${{ github.event.repository.default_branch }}
-          head: HEAD
+          base: ""
+          head: ${{ github.event.repository.default_branch }}
           extraArgs: --no-history
